@@ -1,30 +1,194 @@
-//
-//  AppDelegate.swift
-//  MP3Player
-//
-//  Created by Aaron Greisen on 9/13/25.
-//
-
 import Cocoa
+import AVFoundation
 
-@main
-class AppDelegate: NSObject, NSApplicationDelegate {
-
+@NSApplicationMain
+class AppDelegate: NSObject, NSApplicationDelegate, AVAudioPlayerDelegate {
     
-
-
+    var window: PlayerWindow!
+    var player: AVAudioPlayer?
+    var mp3Files: [String] = []
+    var currentIndex: Int = 0
+    var currentPos: TimeInterval = 0.0
+    var isPaused = false
+    var folder: String = ""
+    var autoAdvanceTimer: Timer?
+    var statusLabel: NSTextField!
+    
     func applicationDidFinishLaunching(_ aNotification: Notification) {
-        // Insert code here to initialize your application
+        // Get command-line arg
+        for window in NSApp.windows {
+            if window !== self.window {  // Don't hide your custom window
+                window.orderOut(nil)
+            }
+        }
+        
+        let args = CommandLine.arguments
+        guard args.count > 1 else {
+            print("Usage: ./MP3Player /path/to/file.mp3")
+            NSApp.terminate(nil)
+            return
+        }
+        
+        let mp3File = args[1]
+        guard FileManager.default.fileExists(atPath: mp3File) else {
+            print("File not found: \(mp3File)")
+            NSApp.terminate(nil)
+            return
+        }
+        
+        folder = (mp3File as NSString).deletingLastPathComponent
+        mp3Files = try! FileManager.default.contentsOfDirectory(atPath: folder)
+            .filter { $0.lowercased().hasSuffix(".mp3") }
+            .sorted()
+        guard let index = mp3Files.firstIndex(of: (mp3File as NSString).lastPathComponent) else {
+            print("MP3 not in folder.")
+            NSApp.terminate(nil)
+            return
+        }
+        currentIndex = index
+        
+        // Setup overlay window
+        setupWindow()
+        
+        // Load and play initial track
+        playFile(at: currentIndex, start: 0.0)
+        
+        // Start auto-advance timer
+        autoAdvanceTimer = Timer.scheduledTimer(withTimeInterval: 0.1, repeats: true) { _ in
+            guard let player = self.player else { return }
+            if !player.isPlaying && !self.isPaused && player.currentTime >= (player.duration - 0.1) {  // Near end
+                self.nextTrack()
+            }
+        }
+        
+        // Make window key and front
+        window.makeKeyAndOrderFront(nil)
+        NSApp.activate(ignoringOtherApps: true)
+        
+        // ADD THIS: Re-ensure first responder after showing window (helps with initial focus)
+        window.makeFirstResponder(statusLabel)
+        
+        // ADD THIS: Debug print to confirm key window status (check Xcode console)
+        print("Window key status: \(window.isKeyWindow ? "Key" : "Not key")")
     }
-
+    
+    func setupWindow() {
+        window = PlayerWindow()
+        window.styleMask = [.borderless, .fullSizeContentView]
+        window.isMovableByWindowBackground = true
+        window.level = .floating  // Always on top
+        window.hasShadow = false
+        window.backgroundColor = .black
+        window.isOpaque = true
+        
+        // Center at top
+        let screen = NSScreen.main ?? NSScreen.screens[0]
+        let screenWidth = screen.frame.width
+        window.setFrame(NSRect(x: (screenWidth - 300)/2, y: screen.frame.height - 60, width: 300, height: 30), display: true)
+        
+        // Status label
+        statusLabel = NSTextField(labelWithString: "")
+        statusLabel.font = NSFont.monospacedSystemFont(ofSize: 16, weight: .regular)
+        statusLabel.textColor = .white
+        statusLabel.alignment = .center
+        statusLabel.drawsBackground = false
+        statusLabel.isBordered = false
+        statusLabel.isEditable = false
+        statusLabel.isSelectable = false
+        statusLabel.focusRingType = .none
+        window.contentView = statusLabel
+        
+        // CHANGE THIS: Set first responder to statusLabel instead of window
+        window.makeFirstResponder(statusLabel)
+        
+        // MOVE AND ADD: Set window.delegate after content setup, and add playerDelegate
+        window.delegate = self  // For potential window events (NSWindowDelegate)
+        window.playerDelegate = self  // ADD THIS: Custom delegate for key handling
+        
+    }
+    
+    func updateOverlay(_ text: String) {
+        DispatchQueue.main.async {
+            self.statusLabel.stringValue = text
+        }
+    }
+    
+    func playFile(at index: Int, start: TimeInterval) {
+        currentIndex = index % mp3Files.count
+        currentPos = start
+        let filePath = (folder as NSString).appendingPathComponent(mp3Files[currentIndex])
+        guard let url = URL(string: "file://\(filePath.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? "")") else { return }
+        
+        do {
+            player = try AVAudioPlayer(contentsOf: url)
+            player?.delegate = self
+            player?.currentTime = start
+            player?.play()
+            isPaused = false
+            updateOverlay("▶ \(mp3Files[currentIndex])")
+        } catch {
+            print("Error loading \(filePath): \(error)")
+        }
+    }
+    
+    func togglePause() {
+        guard let player = player else {
+            print("No player available—skipping toggle")
+            return
+        }
+        if isPaused {
+            player.play()
+            isPaused = false
+            updateOverlay("▶ \(mp3Files[currentIndex])")
+        } else {
+            player.pause()
+            isPaused = true
+            updateOverlay("⏸ \(mp3Files[currentIndex])")
+            // Short delay to let pause settle before allowing auto-advance
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                // Optional: Force a state check here if needed
+            }
+        }
+    }
+    
+    func restartTrack() {
+        playFile(at: currentIndex, start: 0.0)
+    }
+    
+    func skipBack() {
+        guard let player = player else { return }
+        currentPos = max(0, player.currentTime - 3)
+        playFile(at: currentIndex, start: currentPos)
+    }
+    
+    func skipForward() {
+        guard let player = player else { return }
+        currentPos = player.currentTime + 3
+        playFile(at: currentIndex, start: currentPos)
+    }
+    
+    func prevTrack() {
+        playFile(at: currentIndex - 1, start: 0.0)
+    }
+    
+    func nextTrack() {
+        playFile(at: currentIndex + 1, start: 0.0)
+    }
+    
+    // AVAudioPlayerDelegate: Auto-advance on finish
+    func audioPlayerDidFinishPlaying(_ player: AVAudioPlayer, successfully flag: Bool) {
+        if flag && !isPaused {  // Already has this, but confirm
+            nextTrack()
+        }
+    }
+    
     func applicationWillTerminate(_ aNotification: Notification) {
-        // Insert code here to tear down your application
+        player?.stop()
+        autoAdvanceTimer?.invalidate()
     }
-
-    func applicationSupportsSecureRestorableState(_ app: NSApplication) -> Bool {
-        return true
-    }
-
-
 }
 
+// MARK: - NSApplicationDelegate extension for window events (if needed)
+extension AppDelegate: NSWindowDelegate {
+    // Override if you need window close handling
+}

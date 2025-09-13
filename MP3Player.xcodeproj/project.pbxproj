@@ -8,18 +8,18 @@
 
 /* Begin PBXBuildFile section */
 		27A0A5412E760049009E23B1 /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 27A0A5402E760049009E23B1 /* AppDelegate.swift */; };
-		27A0A5432E760049009E23B1 /* ViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 27A0A5422E760049009E23B1 /* ViewController.swift */; };
 		27A0A5452E76004C009E23B1 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 27A0A5442E76004C009E23B1 /* Assets.xcassets */; };
 		27A0A5482E76004C009E23B1 /* Main.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 27A0A5462E76004C009E23B1 /* Main.storyboard */; };
+		27A0A5502E7600C4009E23B1 /* PlayerWindow.swift in Sources */ = {isa = PBXBuildFile; fileRef = 27A0A54F2E7600C4009E23B1 /* PlayerWindow.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
 		27A0A53D2E760049009E23B1 /* MP3Player.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = MP3Player.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		27A0A5402E760049009E23B1 /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppDelegate.swift; sourceTree = "<group>"; };
-		27A0A5422E760049009E23B1 /* ViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ViewController.swift; sourceTree = "<group>"; };
 		27A0A5442E76004C009E23B1 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		27A0A5472E76004C009E23B1 /* Base */ = {isa = PBXFileReference; lastKnownFileType = file.storyboard; name = Base; path = Base.lproj/Main.storyboard; sourceTree = "<group>"; };
 		27A0A5492E76004C009E23B1 /* MP3Player.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = MP3Player.entitlements; sourceTree = "<group>"; };
+		27A0A54F2E7600C4009E23B1 /* PlayerWindow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlayerWindow.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -53,7 +53,7 @@
 			isa = PBXGroup;
 			children = (
 				27A0A5402E760049009E23B1 /* AppDelegate.swift */,
-				27A0A5422E760049009E23B1 /* ViewController.swift */,
+				27A0A54F2E7600C4009E23B1 /* PlayerWindow.swift */,
 				27A0A5442E76004C009E23B1 /* Assets.xcassets */,
 				27A0A5462E76004C009E23B1 /* Main.storyboard */,
 				27A0A5492E76004C009E23B1 /* MP3Player.entitlements */,
@@ -131,7 +131,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				27A0A5432E760049009E23B1 /* ViewController.swift in Sources */,
+				27A0A5502E7600C4009E23B1 /* PlayerWindow.swift in Sources */,
 				27A0A5412E760049009E23B1 /* AppDelegate.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
