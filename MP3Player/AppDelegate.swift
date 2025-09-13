@@ -15,61 +15,76 @@ class AppDelegate: NSObject, NSApplicationDelegate, AVAudioPlayerDelegate {
     var statusLabel: NSTextField!
     
     func applicationDidFinishLaunching(_ aNotification: Notification) {
-        // Get command-line arg
+        // Hide any default windows that might have been created
         for window in NSApp.windows {
-            if window !== self.window {  // Don't hide your custom window
+            if window !== self.window {
                 window.orderOut(nil)
             }
         }
         
+        // Check if launched with command-line arguments
         let args = CommandLine.arguments
-        guard args.count > 1 else {
-            print("Usage: ./MP3Player /path/to/file.mp3")
-            NSApp.terminate(nil)
-            return
+        if args.count > 1 {
+            // Launched from command line with file path
+            let mp3File = args[1]
+            guard FileManager.default.fileExists(atPath: mp3File) else {
+                print("File not found: \(mp3File)")
+                NSApp.terminate(nil)
+                return
+            }
+            _ = application(NSApp, openFile: mp3File)
+        } else {
+            // Launched normally - setup window and wait for file via "Open With"
+            setupWindow()
+            updateOverlay("Drop an MP3 or use 'Open With'...")
+            window.makeKeyAndOrderFront(nil)
+            NSApp.activate(ignoringOtherApps: true)
+            window.makeFirstResponder(statusLabel)
+        }
+    }
+    
+    func application(_ sender: NSApplication, openFile filename: String) -> Bool {
+        // This gets called when a file is opened with your app
+        guard FileManager.default.fileExists(atPath: filename) else {
+            print("File not found: \(filename)")
+            return false
         }
         
-        let mp3File = args[1]
-        guard FileManager.default.fileExists(atPath: mp3File) else {
-            print("File not found: \(mp3File)")
-            NSApp.terminate(nil)
-            return
-        }
-        
-        folder = (mp3File as NSString).deletingLastPathComponent
-        mp3Files = try! FileManager.default.contentsOfDirectory(atPath: folder)
+        folder = (filename as NSString).deletingLastPathComponent
+        mp3Files = (try? FileManager.default.contentsOfDirectory(atPath: folder)
             .filter { $0.lowercased().hasSuffix(".mp3") }
-            .sorted()
-        guard let index = mp3Files.firstIndex(of: (mp3File as NSString).lastPathComponent) else {
+            .sorted()) ?? []
+        
+        guard let index = mp3Files.firstIndex(of: (filename as NSString).lastPathComponent) else {
             print("MP3 not in folder.")
-            NSApp.terminate(nil)
-            return
+            return false
         }
         currentIndex = index
         
-        // Setup overlay window
-        setupWindow()
+        // Setup window if not already done
+        if window == nil {
+            setupWindow()
+        }
         
-        // Load and play initial track
+        // Load and play the selected track
         playFile(at: currentIndex, start: 0.0)
         
-        // Start auto-advance timer
-        autoAdvanceTimer = Timer.scheduledTimer(withTimeInterval: 0.1, repeats: true) { _ in
-            guard let player = self.player else { return }
-            if !player.isPlaying && !self.isPaused && player.currentTime >= (player.duration - 0.1) {  // Near end
-                self.nextTrack()
+        // Start auto-advance timer if not already running
+        if autoAdvanceTimer == nil {
+            autoAdvanceTimer = Timer.scheduledTimer(withTimeInterval: 0.1, repeats: true) { _ in
+                guard let player = self.player else { return }
+                if !player.isPlaying && !self.isPaused && player.currentTime >= (player.duration - 0.1) {
+                    self.nextTrack()
+                }
             }
         }
         
         // Make window key and front
         window.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
-        
-        // ADD THIS: Re-ensure first responder after showing window (helps with initial focus)
         window.makeFirstResponder(statusLabel)
         
-        // ADD THIS: Debug print to confirm key window status (check Xcode console)
-        print("Window key status: \(window.isKeyWindow ? "Key" : "Not key")")
+        return true
     }
     
     func setupWindow() {

@@ -52,7 +52,7 @@
       <CommandLineArguments>
          <CommandLineArgument
             argument = "&quot;/Users/aarongreisen/Desktop/Latin Bass/1-06 Guaracha 3-2, Tumbao W_Rhythmic &amp; Melodic Variations 2.mp3&quot;"
-            isEnabled = "YES">
+            isEnabled = "NO">
          </CommandLineArgument>
       </CommandLineArguments>
    </LaunchAction>
