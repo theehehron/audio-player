@@ -14,8 +14,8 @@ class PlayerWindow: NSWindow {
         
         switch keyCode {
         case 49:  // Space
-            playerDelegate?.togglePause()  // Safe now due to guard
-        case 82:  // 0
+            playerDelegate?.togglePause() 
+        case 82, 29, 36:  // KP_0 (keypad 0), 0, and return
             playerDelegate?.restartTrack()
         case 123:  // Left arrow
             playerDelegate?.skipBack()
@@ -25,8 +25,6 @@ class PlayerWindow: NSWindow {
             playerDelegate?.prevTrack()
         case 47:   // . (period)
             playerDelegate?.nextTrack()
-        case 76:   // KP_0 (keypad 0)
-            playerDelegate?.restartTrack()
         default:
             super.keyDown(with: event)
         }

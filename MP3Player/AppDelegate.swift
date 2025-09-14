@@ -83,7 +83,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, AVAudioPlayerDelegate {
             // Launched normally - setup window and wait for file via "Open With"
             setupWindow()
             if fileWasOpened == false {
-                updateOverlay("Drop an MP3 or use 'Open With'...")
+                updateOverlay("Drop MP3 onto app icon or use 'Open With'...")
             }
             window.makeKeyAndOrderFront(nil)
             NSApp.activate(ignoringOtherApps: true)
@@ -103,7 +103,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, AVAudioPlayerDelegate {
         // Center at top
         let screen = NSScreen.main ?? NSScreen.screens[0]
         let screenWidth = screen.frame.width
-        window.setFrame(NSRect(x: (screenWidth - 300)/2, y: screen.frame.height - 60, width: 300, height: 30), display: true)
+        window.setFrame(NSRect(x: (screenWidth - 450)/2, y: screen.frame.height - 60, width: 450, height: 30), display: true)
         
         // Status label
         statusLabel = NSTextField(labelWithString: "")
