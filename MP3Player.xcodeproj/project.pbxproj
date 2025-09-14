@@ -11,7 +11,6 @@
 		27A0A5452E76004C009E23B1 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 27A0A5442E76004C009E23B1 /* Assets.xcassets */; };
 		27A0A5482E76004C009E23B1 /* Main.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 27A0A5462E76004C009E23B1 /* Main.storyboard */; };
 		27A0A5502E7600C4009E23B1 /* PlayerWindow.swift in Sources */ = {isa = PBXBuildFile; fileRef = 27A0A54F2E7600C4009E23B1 /* PlayerWindow.swift */; };
-		27A0A5562E76138E009E23B1 /* mp3_player_icon.icns in Resources */ = {isa = PBXBuildFile; fileRef = 27A0A5552E76138E009E23B1 /* mp3_player_icon.icns */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -21,7 +20,6 @@
 		27A0A5472E76004C009E23B1 /* Base */ = {isa = PBXFileReference; lastKnownFileType = file.storyboard; name = Base; path = Base.lproj/Main.storyboard; sourceTree = "<group>"; };
 		27A0A5492E76004C009E23B1 /* MP3Player.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = MP3Player.entitlements; sourceTree = "<group>"; };
 		27A0A54F2E7600C4009E23B1 /* PlayerWindow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlayerWindow.swift; sourceTree = "<group>"; };
-		27A0A5552E76138E009E23B1 /* mp3_player_icon.icns */ = {isa = PBXFileReference; lastKnownFileType = image.icns; path = mp3_player_icon.icns; sourceTree = SOURCE_ROOT; };
 		27A0A5572E761E64009E23B1 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
@@ -61,7 +59,6 @@
 				27A0A5442E76004C009E23B1 /* Assets.xcassets */,
 				27A0A5462E76004C009E23B1 /* Main.storyboard */,
 				27A0A5492E76004C009E23B1 /* MP3Player.entitlements */,
-				27A0A5552E76138E009E23B1 /* mp3_player_icon.icns */,
 			);
 			path = MP3Player;
 			sourceTree = "<group>";
@@ -126,7 +123,6 @@
 			files = (
 				27A0A5452E76004C009E23B1 /* Assets.xcassets in Resources */,
 				27A0A5482E76004C009E23B1 /* Main.storyboard in Resources */,
-				27A0A5562E76138E009E23B1 /* mp3_player_icon.icns in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

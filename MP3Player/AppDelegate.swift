@@ -6,6 +6,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, AVAudioPlayerDelegate {
     
     var window: PlayerWindow!
     var player: AVAudioPlayer?
+    var fileWasOpened = false
     var mp3Files: [String] = []
     var currentIndex: Int = 0
     var currentPos: TimeInterval = 0.0
@@ -13,35 +14,6 @@ class AppDelegate: NSObject, NSApplicationDelegate, AVAudioPlayerDelegate {
     var folder: String = ""
     var autoAdvanceTimer: Timer?
     var statusLabel: NSTextField!
-    
-    func applicationDidFinishLaunching(_ aNotification: Notification) {
-        // Hide any default windows that might have been created
-        for window in NSApp.windows {
-            if window !== self.window {
-                window.orderOut(nil)
-            }
-        }
-        
-        // Check if launched with command-line arguments
-        let args = CommandLine.arguments
-        if args.count > 1 {
-            // Launched from command line with file path
-            let mp3File = args[1]
-            guard FileManager.default.fileExists(atPath: mp3File) else {
-                print("File not found: \(mp3File)")
-                NSApp.terminate(nil)
-                return
-            }
-            _ = application(NSApp, openFile: mp3File)
-        } else {
-            // Launched normally - setup window and wait for file via "Open With"
-            setupWindow()
-            updateOverlay("Drop an MP3 or use 'Open With'...")
-            window.makeKeyAndOrderFront(nil)
-            NSApp.activate(ignoringOtherApps: true)
-            window.makeFirstResponder(statusLabel)
-        }
-    }
     
     func application(_ sender: NSApplication, openFile filename: String) -> Bool {
         // This gets called when a file is opened with your app
@@ -60,6 +32,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, AVAudioPlayerDelegate {
             return false
         }
         currentIndex = index
+        fileWasOpened = true
         
         // Setup window if not already done
         if window == nil {
@@ -85,6 +58,37 @@ class AppDelegate: NSObject, NSApplicationDelegate, AVAudioPlayerDelegate {
         window.makeFirstResponder(statusLabel)
         
         return true
+    }
+    
+    func applicationDidFinishLaunching(_ aNotification: Notification) {
+        // Hide any default windows that might have been created
+        for window in NSApp.windows {
+            if window !== self.window {
+                window.orderOut(nil)
+            }
+        }
+        
+        // Check if launched with command-line arguments
+        let args = CommandLine.arguments
+        if args.count > 1 {
+            // Launched from command line with file path
+            let mp3File = args[1]
+            guard FileManager.default.fileExists(atPath: mp3File) else {
+                print("File not found: \(mp3File)")
+                NSApp.terminate(nil)
+                return
+            }
+            _ = application(NSApp, openFile: mp3File)
+        } else {
+            // Launched normally - setup window and wait for file via "Open With"
+            setupWindow()
+            if fileWasOpened == false {
+                updateOverlay("Drop an MP3 or use 'Open With'...")
+            }
+            window.makeKeyAndOrderFront(nil)
+            NSApp.activate(ignoringOtherApps: true)
+            window.makeFirstResponder(statusLabel)
+        }
     }
     
     func setupWindow() {
@@ -140,7 +144,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, AVAudioPlayerDelegate {
             player?.currentTime = start
             player?.play()
             isPaused = false
-            updateOverlay("▶ \(mp3Files[currentIndex])")
+            updateOverlay("⏸ \(mp3Files[currentIndex])")
         } catch {
             print("Error loading \(filePath): \(error)")
         }
@@ -154,11 +158,11 @@ class AppDelegate: NSObject, NSApplicationDelegate, AVAudioPlayerDelegate {
         if isPaused {
             player.play()
             isPaused = false
-            updateOverlay("▶ \(mp3Files[currentIndex])")
+            updateOverlay("⏸ \(mp3Files[currentIndex])")
         } else {
             player.pause()
             isPaused = true
-            updateOverlay("⏸ \(mp3Files[currentIndex])")
+            updateOverlay("▶ \(mp3Files[currentIndex])")
             // Short delay to let pause settle before allowing auto-advance
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
                 // Optional: Force a state check here if needed
@@ -183,11 +187,11 @@ class AppDelegate: NSObject, NSApplicationDelegate, AVAudioPlayerDelegate {
     }
     
     func prevTrack() {
-        playFile(at: currentIndex - 1, start: 0.0)
+        playFile(at: max(0, currentIndex - 1), start: 0.0)
     }
     
     func nextTrack() {
-        playFile(at: currentIndex + 1, start: 0.0)
+        playFile(at: min(currentIndex + 1, mp3Files.count - 1), start: 0.0)
     }
     
     // AVAudioPlayerDelegate: Auto-advance on finish

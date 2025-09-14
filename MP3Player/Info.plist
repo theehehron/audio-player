@@ -16,12 +16,6 @@
 				<string>public.mp3</string>
 			</array>
 		</dict>
-		<dict>
-			<key>CFBundleTypeRole</key>
-			<string>Editor</string>
-			<key>LSHandlerRank</key>
-			<string>Default</string>
-		</dict>
 	</array>
 </dict>
 </plist>
