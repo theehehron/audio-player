@@ -1,5 +1,6 @@
 import Cocoa
 import AVFoundation
+import Foundation
 
 @NSApplicationMain
 class AppDelegate: NSObject, NSApplicationDelegate, AVAudioPlayerDelegate {
@@ -14,6 +15,14 @@ class AppDelegate: NSObject, NSApplicationDelegate, AVAudioPlayerDelegate {
     var folder: String = ""
     var autoAdvanceTimer: Timer?
     var statusLabel: NSTextField!
+    var validAudioFileSuffix: [String] = [".mp3", ".m4a", ".aac", ".wav", ".aiff"]
+    var validAudioFileIcloudSuffix: [String] {
+        return validAudioFileSuffix.map { $0 + ".icloud" }
+    }
+    var validSuffixes: [String] {
+        return validAudioFileSuffix + validAudioFileIcloudSuffix
+    }
+    
     
     func application(_ sender: NSApplication, openFile filename: String) -> Bool {
         // This gets called when a file is opened with your app
@@ -23,9 +32,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, AVAudioPlayerDelegate {
         }
         
         folder = (filename as NSString).deletingLastPathComponent
-        mp3Files = (try? FileManager.default.contentsOfDirectory(atPath: folder)
-            .filter { $0.lowercased().hasSuffix(".mp3") }
-            .sorted()) ?? []
+        updateMP3FilesList()
         
         guard let index = mp3Files.firstIndex(of: (filename as NSString).lastPathComponent) else {
             print("MP3 not in folder.")
@@ -40,8 +47,9 @@ class AppDelegate: NSObject, NSApplicationDelegate, AVAudioPlayerDelegate {
         }
         
         // Load and play the selected track
-        playFile(at: currentIndex, start: 0.0)
-        
+        Task {
+            await playFile(at: currentIndex, start: 0.0)
+        }
         // Start auto-advance timer if not already running
         if autoAdvanceTimer == nil {
             autoAdvanceTimer = Timer.scheduledTimer(withTimeInterval: 0.1, repeats: true) { _ in
@@ -132,11 +140,32 @@ class AppDelegate: NSObject, NSApplicationDelegate, AVAudioPlayerDelegate {
         }
     }
     
-    func playFile(at index: Int, start: TimeInterval) {
+    func playFile(at index: Int, start: TimeInterval) async {
         currentIndex = index % mp3Files.count
         currentPos = start
         let filePath = (folder as NSString).appendingPathComponent(mp3Files[currentIndex])
-        guard let url = URL(string: "file://\(filePath.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? "")") else { return }
+        let url: URL
+        if mp3Files[currentIndex].hasSuffix(".mp3"){
+            guard let fileUrl = URL(string: "file://\(filePath.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? "")") else { return }
+            url = fileUrl
+        }
+        else if mp3Files[currentIndex].hasSuffix(".icloud"){
+            guard let icloudPath = URL(string: "file://\(filePath.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? "")") else { return }
+            do {
+                url = try await downloadFromiCloud(iCloudURL: icloudPath)
+            } catch {
+                print("Download Failed")
+                return
+            }
+        } else {
+            print("unexpected filetype")
+            return
+        }
+        updateMP3FilesList()
+        
+        if mp3Files[currentIndex] != url.lastPathComponent {
+            currentIndex = mp3Files.firstIndex(of: url.lastPathComponent)!
+        }
         
         do {
             player = try AVAudioPlayer(contentsOf: url)
@@ -171,27 +200,37 @@ class AppDelegate: NSObject, NSApplicationDelegate, AVAudioPlayerDelegate {
     }
     
     func restartTrack() {
-        playFile(at: currentIndex, start: 0.0)
+        Task{
+            await playFile(at: currentIndex, start: 0.0)
+        }
     }
     
     func skipBack() {
         guard let player = player else { return }
         currentPos = max(0, player.currentTime - 3)
-        playFile(at: currentIndex, start: currentPos)
+        Task {
+            await playFile(at: currentIndex, start: currentPos)
+        }
     }
     
     func skipForward() {
         guard let player = player else { return }
         currentPos = player.currentTime + 3
-        playFile(at: currentIndex, start: currentPos)
+        Task {
+            await playFile(at: currentIndex, start: currentPos)
+        }
     }
     
     func prevTrack() {
-        playFile(at: max(0, currentIndex - 1), start: 0.0)
+        Task {
+            await playFile(at: max(0, currentIndex - 1), start: 0.0)
+        }
     }
     
     func nextTrack() {
-        playFile(at: min(currentIndex + 1, mp3Files.count - 1), start: 0.0)
+        Task {
+            await playFile(at: min(currentIndex + 1, mp3Files.count - 1), start: 0.0)
+        }
     }
     
     // AVAudioPlayerDelegate: Auto-advance on finish
@@ -204,6 +243,36 @@ class AppDelegate: NSObject, NSApplicationDelegate, AVAudioPlayerDelegate {
     func applicationWillTerminate(_ aNotification: Notification) {
         player?.stop()
         autoAdvanceTimer?.invalidate()
+    }
+    
+    func downloadFromiCloud(iCloudURL: URL) async throws -> URL {
+        // 1. Start downloading
+        try FileManager.default.startDownloadingUbiquitousItem(at: iCloudURL)
+        
+        // 2. Wait until downloaded
+        while true {
+            var downloadStatus: AnyObject?
+            try (iCloudURL as NSURL).getResourceValue(&downloadStatus, forKey: .ubiquitousItemDownloadingStatusKey)
+            
+            if let status = downloadStatus as? String {
+                if status == URLUbiquitousItemDownloadingStatus.current.rawValue ||
+                   status == URLUbiquitousItemDownloadingStatus.downloaded.rawValue {
+                    // 3. Return the actual file URL (without .icloud extension)
+                    let actualFileName = iCloudURL.lastPathComponent.replacingOccurrences(of: ".icloud", with: "")
+                    let actualURL = iCloudURL.deletingLastPathComponent().appendingPathComponent(actualFileName)
+                    return actualURL
+                }
+            }
+            
+            // Wait a bit before checking again
+            try await Task.sleep(nanoseconds: 500_000_000) // 0.5 seconds
+        }
+    }
+    
+    func updateMP3FilesList(){
+        mp3Files = (try? FileManager.default.contentsOfDirectory(atPath: folder)
+                    .filter { fileName in validSuffixes.contains { fileName.lowercased().hasSuffix($0) } }
+                    .sorted()) ?? []
     }
 }
 
