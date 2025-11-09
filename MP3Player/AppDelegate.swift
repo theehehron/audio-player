@@ -80,9 +80,8 @@ class AppDelegate: NSObject, NSApplicationDelegate, AVAudioPlayerDelegate {
             }
             _ = application(NSApp, openFile: mp3File)
         } else {
-            // Launched normally - setup window and wait for file via "Open With"
-            setupWindow()
-            if fileWasOpened == false {
+            if !fileWasOpened {
+                setupWindow()
                 updateOverlay("Drop MP3 onto app icon or use 'Open With'...")
             }
             window.makeKeyAndOrderFront(nil)
