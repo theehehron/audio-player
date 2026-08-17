@@ -1,212 +1,255 @@
 import Cocoa
 import AVFoundation
+import UniformTypeIdentifiers
 
 @NSApplicationMain
-class AppDelegate: NSObject, NSApplicationDelegate, AVAudioPlayerDelegate {
-    
+class AppDelegate: NSObject, NSApplicationDelegate, AVAudioPlayerDelegate, NSWindowDelegate {
+
     var window: PlayerWindow!
     var player: AVAudioPlayer?
     var fileWasOpened = false
     var mp3Files: [String] = []
     var currentIndex: Int = 0
-    var currentPos: TimeInterval = 0.0
     var isPaused = false
+    var finishedCurrentTrack = false
     var folder: String = ""
-    var autoAdvanceTimer: Timer?
-    var statusLabel: NSTextField!
-    
+    var progressTimer: Timer?
+
     func application(_ sender: NSApplication, openFile filename: String) -> Bool {
-        // This gets called when a file is opened with your app
         guard FileManager.default.fileExists(atPath: filename) else {
             print("File not found: \(filename)")
             return false
         }
-        
+
         folder = (filename as NSString).deletingLastPathComponent
         mp3Files = (try? FileManager.default.contentsOfDirectory(atPath: folder)
             .filter { $0.lowercased().hasSuffix(".mp3") }
             .sorted()) ?? []
-        
+
         guard let index = mp3Files.firstIndex(of: (filename as NSString).lastPathComponent) else {
             print("MP3 not in folder.")
             return false
         }
+
         currentIndex = index
         fileWasOpened = true
-        
-        // Setup window if not already done
-        if window == nil {
-            setupWindow()
-        }
-        
-        // Load and play the selected track
+
+        ensureWindow()
+
         playFile(at: currentIndex, start: 0.0)
-        
-        // Start auto-advance timer if not already running
-        if autoAdvanceTimer == nil {
-            autoAdvanceTimer = Timer.scheduledTimer(withTimeInterval: 0.1, repeats: true) { _ in
-                guard let player = self.player else { return }
-                if !player.isPlaying && !self.isPaused && player.currentTime >= (player.duration - 0.1) {
-                    self.nextTrack()
-                }
-            }
-        }
-        
-        // Make window key and front
-        window.makeKeyAndOrderFront(nil)
-        NSApp.activate(ignoringOtherApps: true)
-        window.makeFirstResponder(statusLabel)
-        
+        startProgressTimer()
+        presentWindow()
         return true
     }
-    
+
     func applicationDidFinishLaunching(_ aNotification: Notification) {
-        // Hide any default windows that might have been created
-        for window in NSApp.windows {
-            if window !== self.window {
-                window.orderOut(nil)
-            }
+        for existing in NSApp.windows where existing !== window {
+            existing.orderOut(nil)
         }
-        
-        // Check if launched with command-line arguments
-        let args = CommandLine.arguments
-        if args.count > 1 {
-            // Launched from command line with file path
-            let mp3File = args[1]
-            guard FileManager.default.fileExists(atPath: mp3File) else {
+
+        bindOpenMenu()
+
+        // Xcode passes flags like -NSDocumentRevisionsDebugMode; only treat real paths as files.
+        if let mp3File = CommandLine.arguments.dropFirst().first(where: { arg in
+            !arg.hasPrefix("-") && arg.lowercased().hasSuffix(".mp3")
+        }) {
+            if FileManager.default.fileExists(atPath: mp3File) {
+                _ = application(NSApp, openFile: mp3File)
+            } else {
                 print("File not found: \(mp3File)")
-                NSApp.terminate(nil)
-                return
+                ensureWindow()
+                window.setIdleMessage("File not found")
+                presentWindow()
             }
-            _ = application(NSApp, openFile: mp3File)
-        } else {
-            if !fileWasOpened {
-                setupWindow()
-                updateOverlay("Drop MP3 onto app icon or use 'Open With'...")
-            }
-            window.makeKeyAndOrderFront(nil)
-            NSApp.activate(ignoringOtherApps: true)
-            window.makeFirstResponder(statusLabel)
+        } else if !fileWasOpened {
+            ensureWindow()
+            window.setIdleMessage("Open an MP3 to start")
+            presentWindow()
         }
     }
-    
-    func setupWindow() {
-        window = PlayerWindow()
-        window.styleMask = [.borderless, .fullSizeContentView]
-        window.isMovableByWindowBackground = true
-        window.level = .floating  // Always on top
-        window.hasShadow = false
-        window.backgroundColor = .black
-        window.isOpaque = true
-        
-        // Center at top
-        let screen = NSScreen.main ?? NSScreen.screens[0]
-        let screenWidth = screen.frame.width
-        window.setFrame(NSRect(x: (screenWidth - 450)/2, y: screen.frame.height - 60, width: 450, height: 30), display: true)
-        
-        // Status label
-        statusLabel = NSTextField(labelWithString: "")
-        statusLabel.font = NSFont.monospacedSystemFont(ofSize: 16, weight: .regular)
-        statusLabel.textColor = .white
-        statusLabel.alignment = .center
-        statusLabel.drawsBackground = false
-        statusLabel.isBordered = false
-        statusLabel.isEditable = false
-        statusLabel.isSelectable = false
-        statusLabel.focusRingType = .none
-        window.contentView = statusLabel
-        
-        // CHANGE THIS: Set first responder to statusLabel instead of window
-        window.makeFirstResponder(statusLabel)
-        
-        // MOVE AND ADD: Set window.delegate after content setup, and add playerDelegate
-        window.delegate = self  // For potential window events (NSWindowDelegate)
-        window.playerDelegate = self  // ADD THIS: Custom delegate for key handling
-        
+
+    func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
+        false
     }
-    
-    func updateOverlay(_ text: String) {
-        DispatchQueue.main.async {
-            self.statusLabel.stringValue = text
+
+    func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
+        ensureWindow()
+        presentWindow()
+        return true
+    }
+
+    func windowShouldClose(_ sender: NSWindow) -> Bool {
+        sender.orderOut(nil)
+        return false
+    }
+
+    func applicationWillTerminate(_ aNotification: Notification) {
+        player?.stop()
+        progressTimer?.invalidate()
+    }
+
+    func ensureWindow() {
+        if window == nil {
+            window = PlayerWindow()
+            window.delegate = self
+            window.playerDelegate = self
+            window.center()
         }
     }
-    
+
+    func presentWindow() {
+        NSApp.activate(ignoringOtherApps: true)
+        window.makeKeyAndOrderFront(nil)
+        window.makeFirstResponder(window)
+    }
+
+    private func bindOpenMenu() {
+        guard let fileMenu = NSApp.mainMenu?.item(withTitle: "File")?.submenu,
+              let openItem = fileMenu.items.first(where: { $0.title.hasPrefix("Open") && !$0.title.contains("Recent") }) else {
+            return
+        }
+        openItem.target = self
+        openItem.action = #selector(openDocument(_:))
+        openItem.keyEquivalent = "o"
+    }
+
+    @objc func openDocument(_ sender: Any?) {
+        let panel = NSOpenPanel()
+        panel.allowedContentTypes = [.mp3]
+        panel.allowsMultipleSelection = false
+        panel.canChooseDirectories = false
+        panel.message = "Choose an MP3 to play this folder"
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        _ = application(NSApp, openFile: url.path)
+    }
+
     func playFile(at index: Int, start: TimeInterval) {
-        currentIndex = index % mp3Files.count
-        currentPos = start
+        guard !mp3Files.isEmpty else { return }
+        currentIndex = min(max(index, 0), mp3Files.count - 1)
+
         let filePath = (folder as NSString).appendingPathComponent(mp3Files[currentIndex])
-        guard let url = URL(string: "file://\(filePath.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? "")") else { return }
-        
+        let url = URL(fileURLWithPath: filePath)
+
         do {
             player = try AVAudioPlayer(contentsOf: url)
             player?.delegate = self
-            player?.currentTime = start
+            player?.prepareToPlay()
+            let duration = player?.duration ?? 0
+            player?.currentTime = min(max(0, start), max(0, duration - 0.01))
             player?.play()
             isPaused = false
-            updateOverlay("⏸ \(mp3Files[currentIndex])")
+            finishedCurrentTrack = false
+            window.setTrackName(displayName(for: mp3Files[currentIndex]))
+            window.setPlaying(true)
+            updateTimeDisplay()
         } catch {
             print("Error loading \(filePath): \(error)")
+            player?.stop()
+            player = nil
+            isPaused = true
+            finishedCurrentTrack = false
+            window.setIdleMessage("Couldn’t load \(mp3Files[currentIndex])")
         }
     }
-    
+
     func togglePause() {
-        guard let player = player else {
-            print("No player available—skipping toggle")
+        guard let player = player else { return }
+        if finishedCurrentTrack || player.currentTime >= player.duration - 0.05 {
+            restartTrack()
             return
         }
         if isPaused {
             player.play()
             isPaused = false
-            updateOverlay("⏸ \(mp3Files[currentIndex])")
+            window.setPlaying(true)
         } else {
             player.pause()
             isPaused = true
-            updateOverlay("▶ \(mp3Files[currentIndex])")
-            // Short delay to let pause settle before allowing auto-advance
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-                // Optional: Force a state check here if needed
+            window.setPlaying(false)
+        }
+        updateTimeDisplay()
+    }
+
+    func restartTrack() {
+        guard player != nil else { return }
+        seek(to: 0)
+        player?.play()
+        isPaused = false
+        finishedCurrentTrack = false
+        window.setPlaying(true)
+        updateTimeDisplay()
+    }
+
+    func skipBack() {
+        guard let player = player else { return }
+        finishedCurrentTrack = false
+        seek(to: player.currentTime - 3)
+    }
+
+    func skipForward() {
+        guard let player = player else { return }
+        let target = player.currentTime + 3
+        if target >= player.duration {
+            player.currentTime = player.duration
+            player.pause()
+            isPaused = true
+            finishedCurrentTrack = true
+            window.setPlaying(false)
+            updateTimeDisplay()
+            return
+        }
+        seek(to: target)
+    }
+
+    func seek(to time: TimeInterval) {
+        guard let player = player else { return }
+        player.currentTime = min(max(0, time), max(0, player.duration))
+        updateTimeDisplay()
+    }
+
+    func finishSliderSeek(to time: TimeInterval) {
+        guard let player = player else { return }
+        let duration = player.duration
+        if duration > 0, time >= duration - 0.05, currentIndex < mp3Files.count - 1 {
+            nextTrack()
+            return
+        }
+        seek(to: time)
+    }
+
+    func prevTrack() {
+        playFile(at: max(0, currentIndex - 1), start: 0)
+    }
+
+    func nextTrack() {
+        playFile(at: min(currentIndex + 1, mp3Files.count - 1), start: 0)
+    }
+
+    func audioPlayerDidFinishPlaying(_ player: AVAudioPlayer, successfully flag: Bool) {
+        if flag && !isPaused && currentIndex < mp3Files.count - 1 {
+            nextTrack()
+        } else if flag {
+            isPaused = true
+            finishedCurrentTrack = true
+            window.setPlaying(false)
+            updateTimeDisplay()
+        }
+    }
+
+    private func startProgressTimer() {
+        if progressTimer == nil {
+            progressTimer = Timer.scheduledTimer(withTimeInterval: 0.25, repeats: true) { [weak self] _ in
+                self?.updateTimeDisplay()
             }
         }
     }
-    
-    func restartTrack() {
-        playFile(at: currentIndex, start: 0.0)
-    }
-    
-    func skipBack() {
-        guard let player = player else { return }
-        currentPos = max(0, player.currentTime - 3)
-        playFile(at: currentIndex, start: currentPos)
-    }
-    
-    func skipForward() {
-        guard let player = player else { return }
-        currentPos = player.currentTime + 3
-        playFile(at: currentIndex, start: currentPos)
-    }
-    
-    func prevTrack() {
-        playFile(at: max(0, currentIndex - 1), start: 0.0)
-    }
-    
-    func nextTrack() {
-        playFile(at: min(currentIndex + 1, mp3Files.count - 1), start: 0.0)
-    }
-    
-    // AVAudioPlayerDelegate: Auto-advance on finish
-    func audioPlayerDidFinishPlaying(_ player: AVAudioPlayer, successfully flag: Bool) {
-        if flag && !isPaused {  // Already has this, but confirm
-            nextTrack()
-        }
-    }
-    
-    func applicationWillTerminate(_ aNotification: Notification) {
-        player?.stop()
-        autoAdvanceTimer?.invalidate()
-    }
-}
 
-// MARK: - NSApplicationDelegate extension for window events (if needed)
-extension AppDelegate: NSWindowDelegate {
-    // Override if you need window close handling
+    private func updateTimeDisplay() {
+        guard let player = player else { return }
+        window.setTime(current: player.currentTime, duration: player.duration)
+    }
+
+    private func displayName(for filename: String) -> String {
+        (filename as NSString).deletingPathExtension
+    }
 }
