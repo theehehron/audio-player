@@ -1,12 +1,13 @@
 import Cocoa
 import AVFoundation
+import CoreMedia
 import UniformTypeIdentifiers
 
 @NSApplicationMain
-class AppDelegate: NSObject, NSApplicationDelegate, AVAudioPlayerDelegate, NSWindowDelegate {
+class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
 
     var window: PlayerWindow!
-    var player: AVAudioPlayer?
+    var player: AVPlayer?
     var fileWasOpened = false
     var audioFiles: [String] = []
     var currentIndex: Int = 0
@@ -17,6 +18,8 @@ class AppDelegate: NSObject, NSApplicationDelegate, AVAudioPlayerDelegate, NSWin
     var playbackRate: Float = 1.0
     var floatsOnTop = true
     var floatMenuItem: NSMenuItem?
+    private var endObserver: NSObjectProtocol?
+    private var itemStatusObserver: NSKeyValueObservation?
 
     func application(_ sender: NSApplication, openFile filename: String) -> Bool {
         guard FileManager.default.fileExists(atPath: filename) else {
@@ -88,7 +91,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, AVAudioPlayerDelegate, NSWin
     }
 
     func applicationWillTerminate(_ aNotification: Notification) {
-        player?.stop()
+        tearDownPlayer()
         progressTimer?.invalidate()
     }
 
@@ -157,44 +160,65 @@ class AppDelegate: NSObject, NSApplicationDelegate, AVAudioPlayerDelegate, NSWin
         let filePath = (folder as NSString).appendingPathComponent(audioFiles[currentIndex])
         let url = URL(fileURLWithPath: filePath)
 
-        do {
-            player = try AVAudioPlayer(contentsOf: url)
-            player?.delegate = self
-            player?.enableRate = true
-            player?.rate = playbackRate
-            player?.prepareToPlay()
-            let duration = player?.duration ?? 0
-            player?.currentTime = min(max(0, start), max(0, duration - 0.01))
-            player?.play()
-            player?.rate = playbackRate
-            isPaused = false
-            finishedCurrentTrack = false
-            window.setTrackName(displayName(for: audioFiles[currentIndex]))
-            window.setPlaying(true)
-            window.setSpeedPercent(Int((playbackRate * 100).rounded()))
-            updateTimeDisplay()
-        } catch {
-            print("Error loading \(filePath): \(error)")
-            player?.stop()
-            player = nil
-            isPaused = true
-            finishedCurrentTrack = false
-            window.setIdleMessage("Couldn’t load \(audioFiles[currentIndex])")
+        guard FileManager.default.isReadableFile(atPath: filePath) else {
+            print("Not readable: \(filePath)")
+            failLoad()
+            return
+        }
+
+        let fileSize = (try? FileManager.default.attributesOfItem(atPath: filePath)[.size] as? NSNumber)?.int64Value ?? -1
+        if fileSize == 0 {
+            print("Empty file: \(filePath)")
+            failLoad(message: "Empty file: \(audioFiles[currentIndex])")
+            return
+        }
+
+        tearDownPlayer()
+
+        let item = AVPlayerItem(url: url)
+        let newPlayer = AVPlayer(playerItem: item)
+        newPlayer.automaticallyWaitsToMinimizeStalling = false
+        player = newPlayer
+
+        endObserver = NotificationCenter.default.addObserver(
+            forName: .AVPlayerItemDidPlayToEndTime,
+            object: item,
+            queue: .main
+        ) { [weak self] _ in
+            self?.itemDidFinish()
+        }
+
+        itemStatusObserver = item.observe(\.status, options: [.initial, .new]) { [weak self] item, _ in
+            DispatchQueue.main.async {
+                self?.handleItemStatus(item)
+            }
+        }
+
+        isPaused = true
+        finishedCurrentTrack = false
+        window.setTrackName(displayName(for: audioFiles[currentIndex]))
+        window.setPlaying(true)
+        window.setSpeedPercent(Int((playbackRate * 100).rounded()))
+        seek(to: start) { [weak self] finished in
+            guard let self, finished, self.player != nil else { return }
+            self.isPaused = false
+            self.playAtCurrentRate()
+            self.updateTimeDisplay()
         }
     }
 
     func togglePause() {
-        guard let player = player else { return }
-        if finishedCurrentTrack || player.currentTime >= player.duration - 0.05 {
+        guard player != nil else { return }
+        if finishedCurrentTrack || (durationSeconds() > 0 && currentSeconds() >= durationSeconds() - 0.05) {
             restartTrack()
             return
         }
         if isPaused {
-            player.play()
+            playAtCurrentRate()
             isPaused = false
             window.setPlaying(true)
         } else {
-            player.pause()
+            player?.pause()
             isPaused = true
             window.setPlaying(false)
         }
@@ -203,26 +227,30 @@ class AppDelegate: NSObject, NSApplicationDelegate, AVAudioPlayerDelegate, NSWin
 
     func restartTrack() {
         guard player != nil else { return }
-        seek(to: 0)
-        player?.play()
-        isPaused = false
-        finishedCurrentTrack = false
+        isPaused = true
         window.setPlaying(true)
-        updateTimeDisplay()
+        seek(to: 0) { [weak self] finished in
+            guard let self, finished, self.player != nil else { return }
+            self.finishedCurrentTrack = false
+            self.isPaused = false
+            self.playAtCurrentRate()
+            self.updateTimeDisplay()
+        }
     }
 
     func skipBack() {
-        guard let player = player else { return }
+        guard player != nil else { return }
         finishedCurrentTrack = false
-        seek(to: player.currentTime - heardSkipDelta())
+        seek(to: currentSeconds() - heardSkipDelta())
     }
 
     func skipForward() {
-        guard let player = player else { return }
-        let target = player.currentTime + heardSkipDelta()
-        if target >= player.duration {
-            player.currentTime = player.duration
-            player.pause()
+        guard player != nil else { return }
+        let duration = durationSeconds()
+        let target = currentSeconds() + heardSkipDelta()
+        if duration > 0, target >= duration {
+            seek(to: duration)
+            player?.pause()
             isPaused = true
             finishedCurrentTrack = true
             window.setPlaying(false)
@@ -235,9 +263,8 @@ class AppDelegate: NSObject, NSApplicationDelegate, AVAudioPlayerDelegate, NSWin
     func setPlaybackPercent(_ percent: Int) {
         let clamped = min(max(percent, 10), 100)
         playbackRate = Float(clamped) / 100
-        if let player = player {
-            player.enableRate = true
-            player.rate = playbackRate
+        if player != nil, !isPaused, !finishedCurrentTrack {
+            playAtCurrentRate()
         }
         window.setSpeedPercent(clamped)
     }
@@ -246,15 +273,25 @@ class AppDelegate: NSObject, NSApplicationDelegate, AVAudioPlayerDelegate, NSWin
         3.0 * Double(playbackRate)
     }
 
-    func seek(to time: TimeInterval) {
-        guard let player = player else { return }
-        player.currentTime = min(max(0, time), max(0, player.duration))
-        updateTimeDisplay()
+    func seek(to time: TimeInterval, completion: ((Bool) -> Void)? = nil) {
+        guard let player = player else {
+            completion?(false)
+            return
+        }
+        let duration = durationSeconds()
+        let clamped = duration > 0 ? min(max(0, time), duration) : max(0, time)
+        let cmTime = CMTime(seconds: clamped, preferredTimescale: 600)
+        player.seek(to: cmTime, toleranceBefore: .zero, toleranceAfter: .zero) { [weak self] finished in
+            DispatchQueue.main.async {
+                self?.updateTimeDisplay()
+                completion?(finished)
+            }
+        }
     }
 
     func finishSliderSeek(to time: TimeInterval) {
-        guard let player = player else { return }
-        let duration = player.duration
+        guard player != nil else { return }
+        let duration = durationSeconds()
         if duration > 0, time >= duration - 0.05, currentIndex < audioFiles.count - 1 {
             nextTrack()
             return
@@ -270,15 +307,58 @@ class AppDelegate: NSObject, NSApplicationDelegate, AVAudioPlayerDelegate, NSWin
         playFile(at: min(currentIndex + 1, audioFiles.count - 1), start: 0)
     }
 
-    func audioPlayerDidFinishPlaying(_ player: AVAudioPlayer, successfully flag: Bool) {
-        if flag && !isPaused && currentIndex < audioFiles.count - 1 {
+    private func itemDidFinish() {
+        if isPaused { return }
+        if currentIndex < audioFiles.count - 1 {
             nextTrack()
-        } else if flag {
+        } else {
             isPaused = true
             finishedCurrentTrack = true
             window.setPlaying(false)
             updateTimeDisplay()
         }
+    }
+
+    private func handleItemStatus(_ item: AVPlayerItem) {
+        guard item === player?.currentItem else { return }
+        if item.status == .failed {
+            print("Error loading item: \(item.error?.localizedDescription ?? "unknown")")
+            failLoad()
+        }
+    }
+
+    private func failLoad(message: String? = nil) {
+        tearDownPlayer()
+        isPaused = true
+        finishedCurrentTrack = false
+        window.setIdleMessage(message ?? "Couldn’t load \(audioFiles[currentIndex])")
+    }
+
+    private func playAtCurrentRate() {
+        player?.play()
+        player?.rate = playbackRate
+    }
+
+    private func tearDownPlayer() {
+        if let endObserver {
+            NotificationCenter.default.removeObserver(endObserver)
+            self.endObserver = nil
+        }
+        itemStatusObserver?.invalidate()
+        itemStatusObserver = nil
+        player?.pause()
+        player?.replaceCurrentItem(with: nil)
+        player = nil
+    }
+
+    private func currentSeconds() -> TimeInterval {
+        guard let seconds = player?.currentTime().seconds, seconds.isFinite else { return 0 }
+        return seconds
+    }
+
+    private func durationSeconds() -> TimeInterval {
+        guard let seconds = player?.currentItem?.duration.seconds, seconds.isFinite else { return 0 }
+        return seconds
     }
 
     private func startProgressTimer() {
@@ -290,8 +370,8 @@ class AppDelegate: NSObject, NSApplicationDelegate, AVAudioPlayerDelegate, NSWin
     }
 
     private func updateTimeDisplay() {
-        guard let player = player else { return }
-        window.setTime(current: player.currentTime, duration: player.duration)
+        guard player != nil else { return }
+        window.setTime(current: currentSeconds(), duration: durationSeconds())
     }
 
     private func displayName(for filename: String) -> String {
