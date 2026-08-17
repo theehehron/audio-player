@@ -1,21 +1,26 @@
 # MP3 Player
 
-A small native macOS folder jukebox for practice. Open one MP3 and play the rest of that folder in name order, mostly from the keyboard.
+A small native macOS folder jukebox for practice. Open one audio file and play the rest of that folder in name order, mostly from the keyboard.
 
 ## Features
 
 - **Compact macOS window** — title, progress, and transport buttons
 - **Keyboard-first** — play, scrub, restart, and skip tracks without the mouse
-- **Folder playback** — other MP3s in the same folder, name order
-- **Open With** — right-click an MP3 in Finder → Open With → MP3Player
+- **Folder playback** — other supported audio in the same folder, name order (types can mix)
+- **Open With** — right-click a supported file in Finder → Open With → MP3Player
 - **Auto-advance** — next track when one finishes
 - **Hide on close** — red button hides the window; playback keeps going; Dock icon stays. ⌘Q quits.
 - **Float on Top** — window stays above other apps (on by default). Toggle via **Window → Float on Top**.
 - **Playback speed** — keyboard `1`–`9` set 10%–90%; keyboard `0` is 100%. Shown as a percent on the window. Resets to 100% each launch.
 
+## Supported formats
+
+- MP3, WAV, AIFF (`.aif` / `.aiff`), AAC, M4A, CAF, FLAC
+- Not supported: Ogg/Opus, WMA, and other formats Core Audio does not play
+
 ## Limitations
 
-- MP3 files only
+- A file that exists but will not decode still shows “Couldn’t load …” and stops (no auto-skip)
 
 ## Keyboard Controls
 
@@ -31,15 +36,15 @@ A small native macOS folder jukebox for practice. Open one MP3 and play the rest
 
 ## Launch
 
-- Double-click the app or Run from Xcode → idle window: “Open an MP3 to start”
-- Finder: right-click an `.mp3` → **Open With** → MP3Player
-- Drag an MP3 onto the Dock icon
+- Double-click the app or Run from Xcode → idle window: “Open an audio file to start”
+- Finder: right-click a supported file → **Open With** → MP3Player
+- Drag a file onto the Dock icon
 - File → Open…
-- Command line: `./MP3Player /path/to/your/song.mp3`
+- Command line: `./MP3Player /path/to/your/song.wav`
 
 If the app doesn’t appear in Open With:
 
-1. Right-click any MP3 → **Get Info**
+1. Right-click a file → **Get Info**
 2. **Open with:** → choose this app
 3. **Change All…** if you want it as the default
 
@@ -53,4 +58,4 @@ If the app doesn’t appear in Open With:
 
 - **AppDelegate.swift** — Playback, folder scan, launch, File → Open
 - **PlayerWindow.swift** — Player window, controls, and keyboard input
-- **Info.plist** — Registers the app as an MP3 handler
+- **Info.plist** — Registers the app for MP3 and the other supported types
