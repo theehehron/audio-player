@@ -16,6 +16,25 @@
 				<string>public.mp3</string>
 			</array>
 		</dict>
+		<dict>
+			<key>CFBundleTypeName</key>
+			<string>Audio File</string>
+			<key>CFBundleTypeRole</key>
+			<string>Viewer</string>
+			<key>LSHandlerRank</key>
+			<string>Alternate</string>
+			<key>LSItemContentTypes</key>
+			<array>
+				<string>public.wav</string>
+				<string>com.microsoft.waveform-audio</string>
+				<string>public.aiff-audio</string>
+				<string>public.aac-audio</string>
+				<string>public.mpeg-4-audio</string>
+				<string>com.apple.coreaudio-format</string>
+				<string>org.xiph.flac</string>
+				<string>public.flac</string>
+			</array>
+		</dict>
 	</array>
 </dict>
 </plist>
