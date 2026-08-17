@@ -14,6 +14,9 @@ class AppDelegate: NSObject, NSApplicationDelegate, AVAudioPlayerDelegate, NSWin
     var finishedCurrentTrack = false
     var folder: String = ""
     var progressTimer: Timer?
+    var playbackRate: Float = 1.0
+    var floatsOnTop = true
+    var floatMenuItem: NSMenuItem?
 
     func application(_ sender: NSApplication, openFile filename: String) -> Bool {
         guard FileManager.default.fileExists(atPath: filename) else {
@@ -48,6 +51,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, AVAudioPlayerDelegate, NSWin
         }
 
         bindOpenMenu()
+        bindFloatMenu()
 
         // Xcode passes flags like -NSDocumentRevisionsDebugMode; only treat real paths as files.
         if let mp3File = CommandLine.arguments.dropFirst().first(where: { arg in
@@ -95,6 +99,8 @@ class AppDelegate: NSObject, NSApplicationDelegate, AVAudioPlayerDelegate, NSWin
             window.playerDelegate = self
             window.center()
         }
+        window.setFloatsOnTop(floatsOnTop)
+        window.setSpeedPercent(Int((playbackRate * 100).rounded()))
     }
 
     func presentWindow() {
@@ -111,6 +117,27 @@ class AppDelegate: NSObject, NSApplicationDelegate, AVAudioPlayerDelegate, NSWin
         openItem.target = self
         openItem.action = #selector(openDocument(_:))
         openItem.keyEquivalent = "o"
+    }
+
+    private func bindFloatMenu() {
+        guard let windowMenu = NSApp.mainMenu?.item(withTitle: "Window")?.submenu else { return }
+        let item = NSMenuItem(
+            title: "Float on Top",
+            action: #selector(toggleFloatOnTop(_:)),
+            keyEquivalent: ""
+        )
+        item.target = self
+        item.state = floatsOnTop ? .on : .off
+        windowMenu.insertItem(item, at: 0)
+        windowMenu.insertItem(.separator(), at: 1)
+        floatMenuItem = item
+    }
+
+    @objc func toggleFloatOnTop(_ sender: Any?) {
+        floatsOnTop.toggle()
+        floatMenuItem?.state = floatsOnTop ? .on : .off
+        ensureWindow()
+        window.setFloatsOnTop(floatsOnTop)
     }
 
     @objc func openDocument(_ sender: Any?) {
@@ -133,14 +160,18 @@ class AppDelegate: NSObject, NSApplicationDelegate, AVAudioPlayerDelegate, NSWin
         do {
             player = try AVAudioPlayer(contentsOf: url)
             player?.delegate = self
+            player?.enableRate = true
+            player?.rate = playbackRate
             player?.prepareToPlay()
             let duration = player?.duration ?? 0
             player?.currentTime = min(max(0, start), max(0, duration - 0.01))
             player?.play()
+            player?.rate = playbackRate
             isPaused = false
             finishedCurrentTrack = false
             window.setTrackName(displayName(for: mp3Files[currentIndex]))
             window.setPlaying(true)
+            window.setSpeedPercent(Int((playbackRate * 100).rounded()))
             updateTimeDisplay()
         } catch {
             print("Error loading \(filePath): \(error)")
@@ -183,12 +214,12 @@ class AppDelegate: NSObject, NSApplicationDelegate, AVAudioPlayerDelegate, NSWin
     func skipBack() {
         guard let player = player else { return }
         finishedCurrentTrack = false
-        seek(to: player.currentTime - 3)
+        seek(to: player.currentTime - heardSkipDelta())
     }
 
     func skipForward() {
         guard let player = player else { return }
-        let target = player.currentTime + 3
+        let target = player.currentTime + heardSkipDelta()
         if target >= player.duration {
             player.currentTime = player.duration
             player.pause()
@@ -199,6 +230,20 @@ class AppDelegate: NSObject, NSApplicationDelegate, AVAudioPlayerDelegate, NSWin
             return
         }
         seek(to: target)
+    }
+
+    func setPlaybackPercent(_ percent: Int) {
+        let clamped = min(max(percent, 10), 100)
+        playbackRate = Float(clamped) / 100
+        if let player = player {
+            player.enableRate = true
+            player.rate = playbackRate
+        }
+        window.setSpeedPercent(clamped)
+    }
+
+    private func heardSkipDelta() -> TimeInterval {
+        3.0 * Double(playbackRate)
     }
 
     func seek(to time: TimeInterval) {

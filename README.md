@@ -10,19 +10,20 @@ A small native macOS folder jukebox for practice. Open one MP3 and play the rest
 - **Open With** — right-click an MP3 in Finder → Open With → MP3Player
 - **Auto-advance** — next track when one finishes
 - **Hide on close** — red button hides the window; playback keeps going; Dock icon stays. ⌘Q quits.
+- **Float on Top** — window stays above other apps (on by default). Toggle via **Window → Float on Top**.
+- **Playback speed** — keyboard `1`–`9` set 10%–90%; keyboard `0` is 100%. Shown as a percent on the window. Resets to 100% each launch.
 
 ## Limitations
 
 - MP3 files only
-- Playback speed is not implemented yet (`1`–`9` and keyboard `0` are reserved)
 
 ## Keyboard Controls
 
 - **Space** — Play/Pause
 - **R**, **Return**, or **numpad 0** — Restart current track
-- **Keyboard 0** — reserved (will be 100% speed)
-- **1–9** — reserved (will be 10%–90% speed)
-- **Left / Right Arrow** — Skip back / forward 3 seconds
+- **Keyboard 0** — 100% speed
+- **1–9** — 10%–90% speed
+- **Left / Right Arrow** — Skip back / forward 3 seconds of **heard** time (scales with speed)
 - **Comma (,)** — Previous track
 - **Period (.)** — Next track
 - **⌘O** — Open…
