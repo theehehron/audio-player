@@ -5,6 +5,7 @@ class PlayerWindow: NSWindow {
 
     let titleLabel = NSTextField(labelWithString: "No Track")
     let timeLabel = NSTextField(labelWithString: "0:00 / 0:00")
+    let speedLabel = NSTextField(labelWithString: "100%")
     let progressSlider = NSSlider()
     let playPauseButton = NSButton()
     let prevButton = NSButton()
@@ -34,27 +35,81 @@ class PlayerWindow: NSWindow {
     override var canBecomeMain: Bool { true }
 
     override func keyDown(with event: NSEvent) {
-        guard playerDelegate != nil else {
-            super.keyDown(with: event)
+        if handleKeyEvent(event) { return }
+        super.keyDown(with: event)
+    }
+
+    override func performKeyEquivalent(with event: NSEvent) -> Bool {
+        if isNumpadZero(event) {
+            playerDelegate?.restartTrack()
+            return true
+        }
+        return super.performKeyEquivalent(with: event)
+    }
+
+    override func insertText(_ insertString: Any) {
+        let text = (insertString as? String) ?? (insertString as? NSString as String?) ?? ""
+        // Keypad 0 often arrives as insertText instead of a command keyDown.
+        // Top-row 0 is keyCode 29 and is handled in keyDown as 100% speed.
+        if text == "0", let event = NSApp.currentEvent, event.keyCode != 29 {
+            playerDelegate?.restartTrack()
             return
+        }
+        super.insertText(insertString)
+    }
+
+    /// Returns true if the event was a player command (so the caller should swallow it).
+    func handleKeyEvent(_ event: NSEvent) -> Bool {
+        guard playerDelegate != nil else { return false }
+
+        if isNumpadZero(event) {
+            playerDelegate?.restartTrack()
+            return true
         }
 
         switch event.keyCode {
         case 49: // Space
             playerDelegate?.togglePause()
-        case 15, 82, 36: // R, keypad 0, Return — keyboard 0 is reserved for 100% speed
+        case 15, 36: // R, Return
             playerDelegate?.restartTrack()
-        case 123: // Left
+        case 29: // keyboard 0
+            playerDelegate?.setPlaybackPercent(100)
+        case 18:
+            playerDelegate?.setPlaybackPercent(10)
+        case 19:
+            playerDelegate?.setPlaybackPercent(20)
+        case 20:
+            playerDelegate?.setPlaybackPercent(30)
+        case 21:
+            playerDelegate?.setPlaybackPercent(40)
+        case 23:
+            playerDelegate?.setPlaybackPercent(50)
+        case 22:
+            playerDelegate?.setPlaybackPercent(60)
+        case 26:
+            playerDelegate?.setPlaybackPercent(70)
+        case 28:
+            playerDelegate?.setPlaybackPercent(80)
+        case 25:
+            playerDelegate?.setPlaybackPercent(90)
+        case 123:
             playerDelegate?.skipBack()
-        case 124: // Right
+        case 124:
             playerDelegate?.skipForward()
-        case 43: // comma
+        case 43:
             playerDelegate?.prevTrack()
-        case 47: // period
+        case 47:
             playerDelegate?.nextTrack()
         default:
-            super.keyDown(with: event)
+            return false
         }
+        return true
+    }
+
+    private func isNumpadZero(_ event: NSEvent) -> Bool {
+        if event.keyCode == 82 { return true }
+        let chars = event.charactersIgnoringModifiers ?? ""
+        return event.modifierFlags.contains(.numericPad) && chars == "0"
     }
 
     func setPlaying(_ playing: Bool) {
@@ -85,6 +140,14 @@ class PlayerWindow: NSWindow {
         setPlaying(false)
     }
 
+    func setSpeedPercent(_ percent: Int) {
+        speedLabel.stringValue = "\(percent)%"
+    }
+
+    func setFloatsOnTop(_ floats: Bool) {
+        level = floats ? .floating : .normal
+    }
+
     private func setupChrome() {
         title = "MP3 Player"
         titlebarAppearsTransparent = true
@@ -92,6 +155,7 @@ class PlayerWindow: NSWindow {
         isMovableByWindowBackground = true
         isReleasedWhenClosed = false
         backgroundColor = .windowBackgroundColor
+        level = .floating
     }
 
     private func setupContent() {
@@ -108,6 +172,11 @@ class PlayerWindow: NSWindow {
         timeLabel.textColor = .secondaryLabelColor
         timeLabel.alignment = .center
         timeLabel.translatesAutoresizingMaskIntoConstraints = false
+
+        speedLabel.font = NSFont.monospacedDigitSystemFont(ofSize: 11, weight: .regular)
+        speedLabel.textColor = .secondaryLabelColor
+        speedLabel.alignment = .right
+        speedLabel.translatesAutoresizingMaskIntoConstraints = false
 
         progressSlider.minValue = 0
         progressSlider.maxValue = 1
@@ -134,6 +203,7 @@ class PlayerWindow: NSWindow {
         root.addSubview(titleLabel)
         root.addSubview(progressSlider)
         root.addSubview(timeLabel)
+        root.addSubview(speedLabel)
         root.addSubview(controls)
 
         NSLayoutConstraint.activate([
@@ -147,6 +217,10 @@ class PlayerWindow: NSWindow {
 
             timeLabel.topAnchor.constraint(equalTo: progressSlider.bottomAnchor, constant: 2),
             timeLabel.centerXAnchor.constraint(equalTo: root.centerXAnchor),
+
+            speedLabel.centerYAnchor.constraint(equalTo: timeLabel.centerYAnchor),
+            speedLabel.trailingAnchor.constraint(equalTo: root.trailingAnchor, constant: -16),
+            speedLabel.leadingAnchor.constraint(greaterThanOrEqualTo: timeLabel.trailingAnchor, constant: 8),
 
             controls.topAnchor.constraint(equalTo: timeLabel.bottomAnchor, constant: 8),
             controls.centerXAnchor.constraint(equalTo: root.centerXAnchor),
