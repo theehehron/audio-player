@@ -6,18 +6,6 @@
 	<array>
 		<dict>
 			<key>CFBundleTypeName</key>
-			<string>MP3 Audio File</string>
-			<key>CFBundleTypeRole</key>
-			<string>Editor</string>
-			<key>LSHandlerRank</key>
-			<string>Default</string>
-			<key>LSItemContentTypes</key>
-			<array>
-				<string>public.mp3</string>
-			</array>
-		</dict>
-		<dict>
-			<key>CFBundleTypeName</key>
 			<string>Audio File</string>
 			<key>CFBundleTypeRole</key>
 			<string>Viewer</string>
@@ -25,6 +13,7 @@
 			<string>Alternate</string>
 			<key>LSItemContentTypes</key>
 			<array>
+				<string>public.mp3</string>
 				<string>public.wav</string>
 				<string>com.microsoft.waveform-audio</string>
 				<string>public.aiff-audio</string>
