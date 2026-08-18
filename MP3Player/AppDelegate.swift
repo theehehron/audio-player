@@ -239,12 +239,17 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     }
 
     func setPlaybackPercent(_ percent: Int) {
-        let clamped = min(max(percent, 10), 100)
+        let clamped = min(max(percent, Self.minPlaybackPercent), Self.maxPlaybackPercent)
         playbackRate = Float(clamped) / 100
         if player != nil, !isPaused, !finishedCurrentTrack {
             playAtCurrentRate()
         }
         window.setSpeedPercent(clamped)
+    }
+
+    func nudgePlaybackPercent(_ delta: Int) {
+        let current = Int((playbackRate * 100).rounded())
+        setPlaybackPercent(current + delta)
     }
 
     private func heardSkipDelta() -> TimeInterval {
@@ -413,6 +418,9 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     private func displayName(for filename: String) -> String {
         (filename as NSString).deletingPathExtension
     }
+
+    private static let minPlaybackPercent = 10
+    private static let maxPlaybackPercent = 400
 
     private static let supportedExtensions: Set<String> = [
         "mp3", "wav", "aif", "aiff", "aac", "m4a", "caf", "flac"

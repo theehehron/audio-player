@@ -67,6 +67,16 @@ class PlayerWindow: NSWindow {
             return true
         }
 
+        let chars = event.charactersIgnoringModifiers ?? ""
+        if chars == "=" || chars == "+" {
+            playerDelegate?.nudgePlaybackPercent(1)
+            return true
+        }
+        if chars == "-" {
+            playerDelegate?.nudgePlaybackPercent(-1)
+            return true
+        }
+
         switch event.keyCode {
         case 49: // Space
             playerDelegate?.togglePause()
