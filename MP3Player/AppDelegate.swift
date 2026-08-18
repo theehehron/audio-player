@@ -13,6 +13,10 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     var currentIndex: Int = 0
     var isPaused = false
     var finishedCurrentTrack = false
+    var isScrubbing = false
+    /// Last time we asked AVPlayer to seek to. Prefer this over live currentTime().
+    private var lastSeekTarget: TimeInterval?
+    private var endObserverGen = 0
     var folder: String = ""
     var progressTimer: Timer?
     var playbackRate: Float = 1.0
@@ -23,7 +27,6 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
 
     func application(_ sender: NSApplication, openFile filename: String) -> Bool {
         guard FileManager.default.fileExists(atPath: filename) else {
-            print("File not found: \(filename)")
             return false
         }
 
@@ -33,7 +36,6 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
             .sorted()) ?? []
 
         guard let index = audioFiles.firstIndex(of: (filename as NSString).lastPathComponent) else {
-            print("Audio file not in folder.")
             return false
         }
 
@@ -49,11 +51,6 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     }
 
     func applicationDidFinishLaunching(_ aNotification: Notification) {
-        for existing in NSApp.windows where existing !== window {
-            existing.orderOut(nil)
-        }
-
-        bindOpenMenu()
         bindFloatMenu()
 
         // Xcode passes flags like -NSDocumentRevisionsDebugMode; only treat real paths as files.
@@ -63,7 +60,6 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
             if FileManager.default.fileExists(atPath: audioFile) {
                 _ = application(NSApp, openFile: audioFile)
             } else {
-                print("File not found: \(audioFile)")
                 ensureWindow()
                 window.setIdleMessage("File not found")
                 presentWindow()
@@ -112,16 +108,6 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         window.makeFirstResponder(window)
     }
 
-    private func bindOpenMenu() {
-        guard let fileMenu = NSApp.mainMenu?.item(withTitle: "File")?.submenu,
-              let openItem = fileMenu.items.first(where: { $0.title.hasPrefix("Open") && !$0.title.contains("Recent") }) else {
-            return
-        }
-        openItem.target = self
-        openItem.action = #selector(openDocument(_:))
-        openItem.keyEquivalent = "o"
-    }
-
     private func bindFloatMenu() {
         guard let windowMenu = NSApp.mainMenu?.item(withTitle: "Window")?.submenu else { return }
         let item = NSMenuItem(
@@ -161,14 +147,12 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         let url = URL(fileURLWithPath: filePath)
 
         guard FileManager.default.isReadableFile(atPath: filePath) else {
-            print("Not readable: \(filePath)")
             failLoad()
             return
         }
 
         let fileSize = (try? FileManager.default.attributesOfItem(atPath: filePath)[.size] as? NSNumber)?.int64Value ?? -1
         if fileSize == 0 {
-            print("Empty file: \(filePath)")
             failLoad(message: "Empty file: \(audioFiles[currentIndex])")
             return
         }
@@ -180,13 +164,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         newPlayer.automaticallyWaitsToMinimizeStalling = false
         player = newPlayer
 
-        endObserver = NotificationCenter.default.addObserver(
-            forName: .AVPlayerItemDidPlayToEndTime,
-            object: item,
-            queue: .main
-        ) { [weak self] _ in
-            self?.itemDidFinish()
-        }
+        bindEndObserver(for: item)
 
         itemStatusObserver = item.observe(\.status, options: [.initial, .new]) { [weak self] item, _ in
             DispatchQueue.main.async {
@@ -209,8 +187,8 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
 
     func togglePause() {
         guard player != nil else { return }
-        if finishedCurrentTrack || (durationSeconds() > 0 && currentSeconds() >= durationSeconds() - 0.05) {
-            restartTrack()
+        if shouldPlayPastEnd() {
+            playPastEnd()
             return
         }
         if isPaused {
@@ -273,6 +251,10 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         3.0 * Double(playbackRate)
     }
 
+    func beginSliderSeek() {
+        isScrubbing = true
+    }
+
     func seek(to time: TimeInterval, completion: ((Bool) -> Void)? = nil) {
         guard let player = player else {
             completion?(false)
@@ -280,23 +262,56 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         }
         let duration = durationSeconds()
         let clamped = duration > 0 ? min(max(0, time), duration) : max(0, time)
+        lastSeekTarget = clamped
+        let atEnd = duration > 0 && clamped >= duration - 0.05
+        if !atEnd {
+            finishedCurrentTrack = false
+        }
         let cmTime = CMTime(seconds: clamped, preferredTimescale: 600)
         player.seek(to: cmTime, toleranceBefore: .zero, toleranceAfter: .zero) { [weak self] finished in
             DispatchQueue.main.async {
-                self?.updateTimeDisplay()
+                guard let self else { return }
+                self.updateTimeDisplay()
+                if finished, !atEnd {
+                    self.bindEndObserver(for: player.currentItem)
+                    // Hitting EOF stops AVPlayer even if we ignore DidPlayToEndTime.
+                    if !self.isPaused && !self.finishedCurrentTrack {
+                        self.playAtCurrentRate()
+                    }
+                }
                 completion?(finished)
             }
         }
     }
 
     func finishSliderSeek(to time: TimeInterval) {
-        guard player != nil else { return }
+        let wasScrubbing = isScrubbing
+        isScrubbing = false
+        guard wasScrubbing, player != nil else { return }
         let duration = durationSeconds()
-        if duration > 0, time >= duration - 0.05, currentIndex < audioFiles.count - 1 {
-            nextTrack()
+        if duration > 0, time >= duration - 0.05 {
+            playPastEnd()
             return
         }
         seek(to: time)
+    }
+
+    private func shouldPlayPastEnd() -> Bool {
+        if finishedCurrentTrack { return true }
+        let duration = durationSeconds()
+        guard duration > 0 else { return false }
+        let time = lastSeekTarget ?? currentSeconds()
+        return time >= duration - 0.05
+    }
+
+    /// End of this file: next track if there is one, otherwise replay this one.
+    private func playPastEnd() {
+        isScrubbing = false
+        if currentIndex < audioFiles.count - 1 {
+            nextTrack()
+        } else {
+            restartTrack()
+        }
     }
 
     func prevTrack() {
@@ -308,6 +323,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     }
 
     private func itemDidFinish() {
+        if isScrubbing { return }
         if isPaused { return }
         if currentIndex < audioFiles.count - 1 {
             nextTrack()
@@ -322,7 +338,6 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     private func handleItemStatus(_ item: AVPlayerItem) {
         guard item === player?.currentItem else { return }
         if item.status == .failed {
-            print("Error loading item: \(item.error?.localizedDescription ?? "unknown")")
             failLoad()
         }
     }
@@ -339,7 +354,26 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         player?.rate = playbackRate
     }
 
+    private func bindEndObserver(for item: AVPlayerItem?) {
+        if let endObserver {
+            NotificationCenter.default.removeObserver(endObserver)
+            self.endObserver = nil
+        }
+        guard let item else { return }
+        endObserverGen += 1
+        let gen = endObserverGen
+        endObserver = NotificationCenter.default.addObserver(
+            forName: .AVPlayerItemDidPlayToEndTime,
+            object: item,
+            queue: .main
+        ) { [weak self] _ in
+            guard let self, gen == self.endObserverGen else { return }
+            self.itemDidFinish()
+        }
+    }
+
     private func tearDownPlayer() {
+        endObserverGen += 1
         if let endObserver {
             NotificationCenter.default.removeObserver(endObserver)
             self.endObserver = nil
@@ -349,6 +383,8 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         player?.pause()
         player?.replaceCurrentItem(with: nil)
         player = nil
+        isScrubbing = false
+        lastSeekTarget = nil
     }
 
     private func currentSeconds() -> TimeInterval {

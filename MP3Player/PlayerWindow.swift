@@ -275,6 +275,7 @@ class PlayerWindow: NSWindow {
             isSeeking = false
             makeFirstResponder(self)
         } else {
+            playerDelegate?.beginSliderSeek()
             playerDelegate?.seek(to: sender.doubleValue)
         }
     }

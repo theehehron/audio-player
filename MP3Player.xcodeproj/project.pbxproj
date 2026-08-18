@@ -11,7 +11,6 @@
 		27A0A5452E76004C009E23B1 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 27A0A5442E76004C009E23B1 /* Assets.xcassets */; };
 		27A0A5482E76004C009E23B1 /* Main.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 27A0A5462E76004C009E23B1 /* Main.storyboard */; };
 		27A0A5502E7600C4009E23B1 /* PlayerWindow.swift in Sources */ = {isa = PBXBuildFile; fileRef = 27A0A54F2E7600C4009E23B1 /* PlayerWindow.swift */; };
-		27A0A55B2E777944009E23B1 /* .gitignore in Resources */ = {isa = PBXBuildFile; fileRef = 27A0A55A2E777944009E23B1 /* .gitignore */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -125,7 +124,6 @@
 			buildActionMask = 2147483647;
 			files = (
 				27A0A5452E76004C009E23B1 /* Assets.xcassets in Resources */,
-				27A0A55B2E777944009E23B1 /* .gitignore in Resources */,
 				27A0A5482E76004C009E23B1 /* Main.storyboard in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
