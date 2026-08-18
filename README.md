@@ -11,7 +11,7 @@ A small native macOS folder jukebox for practice. Open one audio file and play t
 - **Auto-advance** — next track when one finishes
 - **Hide on close** — red button hides the window; playback keeps going; Dock icon stays. ⌘Q quits.
 - **Float on Top** — window stays above other apps (on by default). Toggle via **Window → Float on Top**.
-- **Playback speed** — keyboard `1`–`9` set 10%–90%; keyboard `0` is 100%. Shown as a percent on the window. Resets to 100% each launch.
+- **Playback speed** — keyboard `1`–`9` set 10%–90%; keyboard `0` is 100%. `=` / `+` and `-` nudge by 1% (10%–400%). Shown as a percent on the window. Resets to 100% each launch.
 
 ## Supported formats
 
@@ -28,6 +28,8 @@ A small native macOS folder jukebox for practice. Open one audio file and play t
 - **R**, **Return**, or **numpad 0** — Restart current track
 - **Keyboard 0** — 100% speed
 - **1–9** — 10%–90% speed
+- **=** or **+** — Increase speed by 1%
+- **-** — Decrease speed by 1%
 - **Left / Right Arrow** — Skip back / forward 3 seconds of **heard** time (scales with speed)
 - **Comma (,)** — Previous track
 - **Period (.)** — Next track
